@@ -6,7 +6,6 @@ import (
 	"unicode"
 
 	"github.com/pelletier/go-toml/v2/internal/characters"
-	"github.com/pelletier/go-toml/v2/internal/danger"
 )
 
 // ParserError describes an error relative to the content of the document.
@@ -49,8 +48,6 @@ func NewParserError(highlight []byte, format string, args ...interface{}) error 
 // For performance reasons, go-toml doesn't make a copy of the input bytes to
 // the parser. Make sure to copy all the bytes you need to outlive the slice
 // given to the parser.
-//
-// The parser doesn't provide nodes for comments yet, nor for whitespace.
 type Parser struct {
 	data    []byte
 	builder builder
@@ -58,6 +55,8 @@ type Parser struct {
 	left    []byte
 	err     error
 	first   bool
+
+	KeepComments bool
 }
 
 // Data returns the slice provided to the last call to Reset.
@@ -70,9 +69,24 @@ func (p *Parser) Data() []byte {
 // panics.
 func (p *Parser) Range(b []byte) Range {
 	return Range{
-		Offset: uint32(danger.SubsliceOffset(p.data, b)),
-		Length: uint32(len(b)),
+		Offset: uint32(p.subsliceOffset(b)), //nolint:gosec // TOML documents are small
+		Length: uint32(len(b)),              //nolint:gosec // TOML documents are small
 	}
+}
+
+// rangeOfToken computes the Range of a token given the remaining bytes after the token.
+// This is used when the token was extracted from the beginning of some position,
+// and 'rest' is what remains after the token.
+func (p *Parser) rangeOfToken(token, rest []byte) Range {
+	offset := len(p.data) - len(token) - len(rest)
+	return Range{Offset: uint32(offset), Length: uint32(len(token))} //nolint:gosec // TOML documents are small
+}
+
+// subsliceOffset returns the byte offset of subslice b within p.data.
+// b must be a suffix (tail) of p.data.
+func (p *Parser) subsliceOffset(b []byte) int {
+	// b is a suffix of p.data, so its offset is len(p.data) - len(b)
+	return len(p.data) - len(b)
 }
 
 // Raw returns the slice corresponding to the bytes in the given range.
@@ -132,14 +146,50 @@ func (p *Parser) NextExpression() bool {
 }
 
 // Expression returns a pointer to the node representing the last successfully
-// parsed expresion.
+// parsed expression.
 func (p *Parser) Expression() *Node {
 	return p.builder.NodeAt(p.ref)
 }
 
-// Error returns any error that has occured during parsing.
+// Error returns any error that has occurred during parsing.
 func (p *Parser) Error() error {
 	return p.err
+}
+
+// Position describes a position in the input.
+type Position struct {
+	// Number of bytes from the beginning of the input.
+	Offset int
+	// Line number, starting at 1.
+	Line int
+	// Column number, starting at 1.
+	Column int
+}
+
+// Shape describes the position of a range in the input.
+type Shape struct {
+	Start Position
+	End   Position
+}
+
+// Shape returns the shape of the given range in the input.  Will
+// panic if the range is not a subslice of the input.
+func (p *Parser) Shape(r Range) Shape {
+	return Shape{
+		Start: p.positionAt(int(r.Offset)),
+		End:   p.positionAt(int(r.Offset + r.Length)),
+	}
+}
+
+// positionAt returns the position at the given byte offset in the document.
+func (p *Parser) positionAt(offset int) Position {
+	lead := p.data[:offset]
+
+	return Position{
+		Offset: offset,
+		Line:   bytes.Count(lead, []byte{'\n'}) + 1,
+		Column: len(lead) - bytes.LastIndex(lead, []byte{'\n'}),
+	}
 }
 
 func (p *Parser) parseNewline(b []byte) ([]byte, error) {
@@ -155,6 +205,19 @@ func (p *Parser) parseNewline(b []byte) ([]byte, error) {
 	return nil, NewParserError(b[0:1], "expected newline but got %#U", b[0])
 }
 
+func (p *Parser) parseComment(b []byte) (reference, []byte, error) {
+	ref := invalidReference
+	data, rest, err := scanComment(b)
+	if p.KeepComments && err == nil {
+		ref = p.builder.Push(Node{
+			Kind: Comment,
+			Raw:  p.rangeOfToken(data, rest),
+			Data: data,
+		})
+	}
+	return ref, rest, err
+}
+
 func (p *Parser) parseExpression(b []byte) (reference, []byte, error) {
 	// expression =  ws [ comment ]
 	// expression =/ ws keyval ws [ comment ]
@@ -168,7 +231,7 @@ func (p *Parser) parseExpression(b []byte) (reference, []byte, error) {
 	}
 
 	if b[0] == '#' {
-		_, rest, err := scanComment(b)
+		ref, rest, err := p.parseComment(b)
 		return ref, rest, err
 	}
 
@@ -190,7 +253,10 @@ func (p *Parser) parseExpression(b []byte) (reference, []byte, error) {
 	b = p.parseWhitespace(b)
 
 	if len(b) > 0 && b[0] == '#' {
-		_, rest, err := scanComment(b)
+		cref, rest, err := p.parseComment(b)
+		if cref != invalidReference {
+			p.builder.Chain(ref, cref)
+		}
 		return ref, rest, err
 	}
 
@@ -262,6 +328,9 @@ func (p *Parser) parseStdTable(b []byte) (reference, []byte, error) {
 
 func (p *Parser) parseKeyval(b []byte) (reference, []byte, error) {
 	// keyval = key keyval-sep val
+	// Track the start position for Raw range
+	startB := b
+
 	ref := p.builder.Push(Node{
 		Kind: KeyValue,
 	})
@@ -276,7 +345,7 @@ func (p *Parser) parseKeyval(b []byte) (reference, []byte, error) {
 	b = p.parseWhitespace(b)
 
 	if len(b) == 0 {
-		return invalidReference, nil, NewParserError(b, "expected = after a key, but the document ends there")
+		return invalidReference, nil, NewParserError(startB[:len(startB)-len(b)], "expected = after a key, but the document ends there")
 	}
 
 	b, err = expect('=', b)
@@ -293,6 +362,11 @@ func (p *Parser) parseKeyval(b []byte) (reference, []byte, error) {
 
 	p.builder.Chain(valRef, key)
 	p.builder.AttachChild(ref, valRef)
+
+	// Set Raw to span the entire key-value expression.
+	// Access the node directly in the slice to avoid the write barrier
+	// that NodeAt's nodes-pointer setup would trigger.
+	p.builder.tree.nodes[ref].Raw = p.rangeOfToken(startB[:len(startB)-len(b)], b)
 
 	return ref, b, err
 }
@@ -322,7 +396,7 @@ func (p *Parser) parseVal(b []byte) (reference, []byte, error) {
 		if err == nil {
 			ref = p.builder.Push(Node{
 				Kind: String,
-				Raw:  p.Range(raw),
+				Raw:  p.rangeOfToken(raw, b),
 				Data: v,
 			})
 		}
@@ -340,7 +414,7 @@ func (p *Parser) parseVal(b []byte) (reference, []byte, error) {
 		if err == nil {
 			ref = p.builder.Push(Node{
 				Kind: String,
-				Raw:  p.Range(raw),
+				Raw:  p.rangeOfToken(raw, b),
 				Data: v,
 			})
 		}
@@ -402,6 +476,7 @@ func (p *Parser) parseInlineTable(b []byte) (reference, []byte, error) {
 	// inline-table-keyvals = keyval [ inline-table-sep inline-table-keyvals ]
 	parent := p.builder.Push(Node{
 		Kind: InlineTable,
+		Raw:  p.rangeOfToken(b[:1], b[1:]),
 	})
 
 	first := true
@@ -470,15 +545,31 @@ func (p *Parser) parseValArray(b []byte) (reference, []byte, error) {
 		Kind: Array,
 	})
 
+	// First indicates whether the parser is looking for the first element
+	// (non-comment) of the array.
 	first := true
 
-	var lastChild reference
+	lastChild := invalidReference
+
+	addChild := func(valueRef reference) {
+		if lastChild == invalidReference {
+			p.builder.AttachChild(parent, valueRef)
+		} else {
+			p.builder.Chain(lastChild, valueRef)
+		}
+		lastChild = valueRef
+	}
 
 	var err error
 	for len(b) > 0 {
-		b, err = p.parseOptionalWhitespaceCommentNewline(b)
+		var cref reference
+		cref, b, err = p.parseOptionalWhitespaceCommentNewline(b)
 		if err != nil {
 			return parent, nil, err
+		}
+
+		if cref != invalidReference {
+			addChild(cref)
 		}
 
 		if len(b) == 0 {
@@ -495,9 +586,12 @@ func (p *Parser) parseValArray(b []byte) (reference, []byte, error) {
 			}
 			b = b[1:]
 
-			b, err = p.parseOptionalWhitespaceCommentNewline(b)
+			cref, b, err = p.parseOptionalWhitespaceCommentNewline(b)
 			if err != nil {
 				return parent, nil, err
+			}
+			if cref != invalidReference {
+				addChild(cref)
 			}
 		} else if !first {
 			return parent, nil, NewParserError(b[0:1], "array elements must be separated by commas")
@@ -514,17 +608,16 @@ func (p *Parser) parseValArray(b []byte) (reference, []byte, error) {
 			return parent, nil, err
 		}
 
-		if first {
-			p.builder.AttachChild(parent, valueRef)
-		} else {
-			p.builder.Chain(lastChild, valueRef)
-		}
-		lastChild = valueRef
+		addChild(valueRef)
 
-		b, err = p.parseOptionalWhitespaceCommentNewline(b)
+		cref, b, err = p.parseOptionalWhitespaceCommentNewline(b)
 		if err != nil {
 			return parent, nil, err
 		}
+		if cref != invalidReference {
+			addChild(cref)
+		}
+
 		first = false
 	}
 
@@ -533,15 +626,35 @@ func (p *Parser) parseValArray(b []byte) (reference, []byte, error) {
 	return parent, rest, err
 }
 
-func (p *Parser) parseOptionalWhitespaceCommentNewline(b []byte) ([]byte, error) {
+func (p *Parser) parseOptionalWhitespaceCommentNewline(b []byte) (reference, []byte, error) {
+	rootCommentRef := invalidReference
+	latestCommentRef := invalidReference
+
+	addComment := func(ref reference) {
+		switch {
+		case rootCommentRef == invalidReference:
+			rootCommentRef = ref
+		case latestCommentRef == invalidReference:
+			p.builder.AttachChild(rootCommentRef, ref)
+			latestCommentRef = ref
+		default:
+			p.builder.Chain(latestCommentRef, ref)
+			latestCommentRef = ref
+		}
+	}
+
 	for len(b) > 0 {
 		var err error
 		b = p.parseWhitespace(b)
 
 		if len(b) > 0 && b[0] == '#' {
-			_, b, err = scanComment(b)
+			var ref reference
+			ref, b, err = p.parseComment(b)
 			if err != nil {
-				return nil, err
+				return invalidReference, nil, err
+			}
+			if ref != invalidReference {
+				addComment(ref)
 			}
 		}
 
@@ -552,14 +665,14 @@ func (p *Parser) parseOptionalWhitespaceCommentNewline(b []byte) ([]byte, error)
 		if b[0] == '\n' || b[0] == '\r' {
 			b, err = p.parseNewline(b)
 			if err != nil {
-				return nil, err
+				return invalidReference, nil, err
 			}
 		} else {
 			break
 		}
 	}
 
-	return b, nil
+	return rootCommentRef, b, nil
 }
 
 func (p *Parser) parseMultilineLiteralString(b []byte) ([]byte, []byte, []byte, error) {
@@ -612,11 +725,11 @@ func (p *Parser) parseMultilineBasicString(b []byte) ([]byte, []byte, []byte, er
 
 	if !escaped {
 		str := token[startIdx:endIdx]
-		verr := characters.Utf8TomlValidAlreadyEscaped(str)
-		if verr.Zero() {
+		highlight := characters.Utf8TomlValidAlreadyEscaped(str)
+		if len(highlight) == 0 {
 			return token, str, rest, nil
 		}
-		return nil, nil, nil, NewParserError(str[verr.Index:verr.Index+verr.Size], "invalid UTF-8")
+		return nil, nil, nil, NewParserError(highlight, "invalid UTF-8")
 	}
 
 	var builder bytes.Buffer
@@ -652,7 +765,7 @@ func (p *Parser) parseMultilineBasicString(b []byte) ([]byte, []byte, []byte, er
 				i += j
 				for ; i < len(token)-3; i++ {
 					c := token[i]
-					if !(c == '\n' || c == '\r' || c == ' ' || c == '\t') {
+					if c != '\n' && c != '\r' && c != ' ' && c != '\t' {
 						i--
 						break
 					}
@@ -728,7 +841,7 @@ func (p *Parser) parseKey(b []byte) (reference, []byte, error) {
 
 	ref := p.builder.Push(Node{
 		Kind: Key,
-		Raw:  p.Range(raw),
+		Raw:  p.rangeOfToken(raw, b),
 		Data: key,
 	})
 
@@ -744,7 +857,7 @@ func (p *Parser) parseKey(b []byte) (reference, []byte, error) {
 
 			p.builder.PushAndChain(Node{
 				Kind: Key,
-				Raw:  p.Range(raw),
+				Raw:  p.rangeOfToken(raw, b),
 				Data: key,
 			})
 		} else {
@@ -805,11 +918,11 @@ func (p *Parser) parseBasicString(b []byte) ([]byte, []byte, []byte, error) {
 	// validate the string and return a direct reference to the buffer.
 	if !escaped {
 		str := token[startIdx:endIdx]
-		verr := characters.Utf8TomlValidAlreadyEscaped(str)
-		if verr.Zero() {
+		highlight := characters.Utf8TomlValidAlreadyEscaped(str)
+		if len(highlight) == 0 {
 			return token, str, rest, nil
 		}
-		return nil, nil, nil, NewParserError(str[verr.Index:verr.Index+verr.Size], "invalid UTF-8")
+		return nil, nil, nil, NewParserError(highlight, "invalid UTF-8")
 	}
 
 	i := startIdx
@@ -880,7 +993,7 @@ func hexToRune(b []byte, length int) (rune, error) {
 
 	var r uint32
 	for i, c := range b {
-		d := uint32(0)
+		var d uint32
 		switch {
 		case '0' <= c && c <= '9':
 			d = uint32(c - '0')
@@ -921,6 +1034,7 @@ func (p *Parser) parseIntOrFloatOrDateTime(b []byte) (reference, []byte, error) 
 		return p.builder.Push(Node{
 			Kind: Float,
 			Data: b[:3],
+			Raw:  p.rangeOfToken(b[:3], b[3:]),
 		}), b[3:], nil
 	case 'n':
 		if !scanFollowsNan(b) {
@@ -930,6 +1044,7 @@ func (p *Parser) parseIntOrFloatOrDateTime(b []byte) (reference, []byte, error) 
 		return p.builder.Push(Node{
 			Kind: Float,
 			Data: b[:3],
+			Raw:  p.rangeOfToken(b[:3], b[3:]),
 		}), b[3:], nil
 	case '+', '-':
 		return p.scanIntOrFloat(b)
@@ -982,7 +1097,7 @@ byteLoop:
 			}
 		case c == 'T' || c == 't' || c == ':' || c == '.':
 			hasTime = true
-		case c == '+' || c == '-' || c == 'Z' || c == 'z':
+		case c == '+' || c == 'Z' || c == 'z':
 			hasTz = true
 		case c == ' ':
 			if !seenSpace && i+1 < len(b) && isDigit(b[i+1]) {
@@ -1054,6 +1169,7 @@ func (p *Parser) scanIntOrFloat(b []byte) (reference, []byte, error) {
 		return p.builder.Push(Node{
 			Kind: Integer,
 			Data: b[:i],
+			Raw:  p.rangeOfToken(b[:i], b[i:]),
 		}), b[i:], nil
 	}
 
@@ -1077,6 +1193,7 @@ func (p *Parser) scanIntOrFloat(b []byte) (reference, []byte, error) {
 				return p.builder.Push(Node{
 					Kind: Float,
 					Data: b[:i+3],
+					Raw:  p.rangeOfToken(b[:i+3], b[i+3:]),
 				}), b[i+3:], nil
 			}
 
@@ -1088,6 +1205,7 @@ func (p *Parser) scanIntOrFloat(b []byte) (reference, []byte, error) {
 				return p.builder.Push(Node{
 					Kind: Float,
 					Data: b[:i+3],
+					Raw:  p.rangeOfToken(b[:i+3], b[i+3:]),
 				}), b[i+3:], nil
 			}
 
@@ -1110,6 +1228,7 @@ func (p *Parser) scanIntOrFloat(b []byte) (reference, []byte, error) {
 	return p.builder.Push(Node{
 		Kind: kind,
 		Data: b[:i],
+		Raw:  p.rangeOfToken(b[:i], b[i:]),
 	}), b[i:], nil
 }
 

@@ -397,7 +397,10 @@ func (c *StructCode) lastFieldCode(field *StructFieldCode, firstField *Opcode) *
 func (c *StructCode) lastAnonymousFieldCode(firstField *Opcode) *Opcode {
 	// firstField is special StructHead operation for anonymous structure.
 	// So, StructHead's next operation is truly struct head operation.
-	lastField := firstField.Next
+	for firstField.Op == OpStructHead || firstField.Op == OpStructField {
+		firstField = firstField.Next
+	}
+	lastField := firstField
 	for lastField.NextField != nil {
 		lastField = lastField.NextField
 	}
@@ -437,11 +440,6 @@ func (c *StructCode) ToOpcode(ctx *compileContext) Opcodes {
 		}
 		if isEndField {
 			endField := fieldCodes.Last()
-			if isEmbeddedStruct(field) {
-				firstField.End = endField
-				lastField := c.lastAnonymousFieldCode(firstField)
-				lastField.NextField = endField
-			}
 			if len(codes) > 0 {
 				codes.First().End = endField
 			} else {
@@ -520,6 +518,7 @@ func (c *StructCode) ToAnonymousOpcode(ctx *compileContext) Opcodes {
 		prevField = firstField
 		codes = codes.Add(fieldCodes...)
 	}
+	ctx.structTypeToCodes[uintptr(unsafe.Pointer(c.typ))] = codes
 	return codes
 }
 
@@ -698,7 +697,15 @@ func (c *StructFieldCode) addStructEndCode(ctx *compileContext, codes Opcodes) O
 		Indent:     ctx.indent,
 	}
 	codes.Last().Next = end
-	codes.First().NextField = end
+	code := codes.First()
+	for code.Op == OpStructField || code.Op == OpStructHead {
+		code = code.Next
+	}
+	for code.NextField != nil {
+		code = code.NextField
+	}
+	code.NextField = end
+
 	codes = codes.Add(end)
 	ctx.incOpcodeIndex()
 	return codes
