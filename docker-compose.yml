@@ -11,7 +11,7 @@ services:
     container_name: "iptv-proxy"
     restart: on-failure
     ports:
-       # have to be the same as ENV variable PORT
+      # have to be the same as ENV variable PORT
       - 8080:8080
     environment:
       # if you are using m3u remote file
@@ -30,4 +30,3 @@ services:
       #will be used for m3u and xtream auth poxy
       USER: test
       PASSWORD: testpassword
-
