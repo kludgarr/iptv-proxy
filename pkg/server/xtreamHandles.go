@@ -372,7 +372,7 @@ func (c *Config) xtreamHlsStream(ctx *gin.Context) {
 	}
 	channel := s[0]
 
-	url, err := getHlsRedirectURL(channel)
+	redirectURL, err := getHlsRedirectURL(channel)
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 		return
@@ -387,22 +387,17 @@ func (c *Config) xtreamHlsStream(ctx *gin.Context) {
 		return
 	}
 
-	req, err := url.Parse(
-		fmt.Sprintf(
-			"%s://%s/hls/%s?token=%s",
-			url.Scheme,
-			url.Host,
-			ctx.Param("chunk"),
-			token,
-		),
-	)
-
-	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-		return
+	// Build the upstream URL with proper escaping. token is operator-supplied
+	// upstream content; without escaping, characters like &, =, %, or # would
+	// corrupt the query string or smuggle additional parameters.
+	upstream := &url.URL{
+		Scheme:   redirectURL.Scheme,
+		Host:     redirectURL.Host,
+		Path:     fmt.Sprintf("/hls/%s", ctx.Param("chunk")),
+		RawQuery: url.Values{"token": []string{token}}.Encode(),
 	}
 
-	c.xtreamStream(ctx, req)
+	c.xtreamStream(ctx, upstream)
 }
 
 func (c *Config) xtreamHlsrStream(ctx *gin.Context) {

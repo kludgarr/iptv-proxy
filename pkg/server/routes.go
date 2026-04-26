@@ -93,7 +93,7 @@ func (c *Config) m3uRoutes(r *gin.RouterGroup) {
 		}
 
 		if strings.HasSuffix(track.URI, ".m3u8") {
-			key := fmt.Sprintf("/%s/%s/%s/%d/:id", xcpNamespace, c.User, c.Password, i)
+			key := fmt.Sprintf("/%s/%s/%d/:id", c.User, c.Password, i)
 			if _, exists := registered[key]; !exists {
 				registered[key] = struct{}{}
 				r.GET(key, trackConfig.m3u8ReverseProxy)
@@ -105,7 +105,7 @@ func (c *Config) m3uRoutes(r *gin.RouterGroup) {
 			// multi-segment paths from u.Path that wouldn't match the
 			// player-requested URL emitted by replaceURL (which uses
 			// path.Base on the URI path).
-			key := fmt.Sprintf("/%s/%s/%s/%d/%s", xcpNamespace, c.User, c.Password, i, path.Base(u.Path))
+			key := fmt.Sprintf("/%s/%s/%d/%s", c.User, c.Password, i, path.Base(u.Path))
 			if _, exists := registered[key]; !exists {
 				registered[key] = struct{}{}
 				r.GET(key, trackConfig.reverseProxy)
