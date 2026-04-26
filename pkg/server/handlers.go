@@ -1,5 +1,6 @@
 /*
  * Iptv-Proxy is a project to proxyfie an m3u file and to proxyfie an Xtream iptv service (client API).
+ * Copyright (C) 2026  warrentc3
  * Copyright (C) 2020  Pierre-Emmanuel Jacquier
  *
  * This program is free software: you can redistribute it and/or modify
@@ -63,7 +64,7 @@ func (c *Config) m3u8ReverseProxy(ctx *gin.Context) {
 }
 
 func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
-	client := &http.Client{}
+	client := &http.Client{Timeout: 90 * time.Second}
 
 	req, err := http.NewRequest("GET", oriURL.String(), nil)
 	if err != nil {
@@ -72,6 +73,8 @@ func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
 	}
 
 	mergeHttpHeader(req.Header, ctx.Request.Header)
+	req.Header.Del("Authorization")
+	req.Header.Del("Proxy-Authorization")
 
 	resp, err := client.Do(req)
 	if err != nil {

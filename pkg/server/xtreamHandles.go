@@ -441,6 +441,7 @@ func getHlsRedirectURL(channel string) (*url.URL, error) {
 
 func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 	client := &http.Client{
+		Timeout: 90 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -453,6 +454,8 @@ func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 	}
 
 	mergeHttpHeader(req.Header, ctx.Request.Header)
+	req.Header.Del("Authorization")
+	req.Header.Del("Proxy-Authorization")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -480,6 +483,8 @@ func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 			}
 
 			mergeHttpHeader(hlsReq.Header, ctx.Request.Header)
+			hlsReq.Header.Del("Authorization")
+			hlsReq.Header.Del("Proxy-Authorization")
 
 			hlsResp, err := client.Do(hlsReq)
 			if err != nil {
