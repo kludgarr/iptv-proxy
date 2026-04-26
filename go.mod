@@ -5,7 +5,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/jamesnetherton/m3u v0.4.0
-	github.com/tellytv/go.xtream-codes v0.0.0-20220204001149-59925bc76764
+	github.com/warrentc3/go.xtream-codes v0.0.0-20220204001149-59925bc76764
 )
 
 require (
@@ -39,5 +39,7 @@ require (
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/warrentc3/go.xtream-codes => ../go.xtream-codes
 
 go 1.26

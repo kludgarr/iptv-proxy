@@ -159,9 +159,9 @@ github.com/quic-go/quic-go/qlog
 github.com/quic-go/quic-go/qlogwriter
 github.com/quic-go/quic-go/qlogwriter/jsontext
 github.com/quic-go/quic-go/quicvarint
-# github.com/tellytv/go.xtream-codes v0.0.0-20220204001149-59925bc76764
-## explicit; go 1.17
-github.com/tellytv/go.xtream-codes
+# github.com/warrentc3/go.xtream-codes v0.0.0-20220204001149-59925bc76764
+## explicit; go 1.26
+github.com/warrentc3/go.xtream-codes
 # github.com/twitchyliquid64/golang-asm v0.15.1
 ## explicit; go 1.13
 github.com/twitchyliquid64/golang-asm/asm/arch

@@ -257,7 +257,7 @@ and auth with token...
 ## Powered by
 
 - [cobra](https://github.com/spf13/cobra)
-- [go.xtream-codes](https://github.com/tellytv/go.xtream-codes)
+- [go.xtream-codes](https://github.com/warrentc3/go.xtream-codes)
 - [gin](https://github.com/gin-gonic/gin)
 
 Grab me a beer 🍻
