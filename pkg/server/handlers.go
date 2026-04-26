@@ -81,6 +81,16 @@ func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
 		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 		return
 	}
+
+	if shouldRetryWithoutRange(resp) {
+		resp.Body.Close()
+		req.Header.Del("Range")
+		resp, err = client.Do(req)
+		if err != nil {
+			ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
+			return
+		}
+	}
 	defer resp.Body.Close()
 
 	mergeHttpHeader(ctx.Writer.Header(), resp.Header)
@@ -89,6 +99,26 @@ func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
 		io.Copy(w, resp.Body) // nolint: errcheck
 		return false
 	})
+}
+
+// shouldRetryWithoutRange reports whether an upstream's 206 Partial Content
+// response is effectively empty — a sign that the upstream advertises range
+// support in the status code but does not actually return the requested
+// bytes. Some Xtream upstreams emit 206 with Content-Length: 0 (or omit
+// Content-Length entirely while writing nothing) when the requested range
+// cannot be satisfied; players given that response stop instead of falling
+// back to a full-body request.
+func shouldRetryWithoutRange(resp *http.Response) bool {
+	if resp.StatusCode != http.StatusPartialContent {
+		return false
+	}
+	if resp.ContentLength == 0 {
+		return true
+	}
+	if resp.ContentLength < 0 && resp.Header.Get("Content-Length") == "0" {
+		return true
+	}
+	return false
 }
 
 func (c *Config) xtreamStream(ctx *gin.Context, oriURL *url.URL) {
