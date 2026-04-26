@@ -1,3 +1,5 @@
+// v4 release
+
 /*
  * Iptv-Proxy is a project to proxyfie an m3u file and to proxyfie an Xtream iptv service (client API).
  * Copyright (C) 2026  warrentc3
@@ -32,7 +34,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/google/uuid"
 	"github.com/jamesnetherton/m3u"
-	"github.com/pierre-emmanuelJ/iptv-proxy/pkg/config"
+	"github.com/warrentc3/iptv-proxy/pkg/config"
 
 	"github.com/gin-gonic/gin"
 )

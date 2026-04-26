@@ -1,191 +1,151 @@
-# Iptv Proxy
+# iptv-proxy
 
-[![Actions Status](https://github.com/pierre-emmanuelJ/iptv-proxy/workflows/CI/badge.svg)](https://github.com/pierre-emmanuelJ/iptv-proxy/actions?query=workflow%3ACI)
+A small reverse proxy for IPTV M3U playlists and Xtream-Codes-compatible
+provider APIs. Translates upstream credentials and stream URLs into
+proxy-served credentials and URLs so players talk to one stable
+endpoint regardless of changes upstream.
 
-## Description
+## About this fork
 
-Iptv-Proxy is a project to proxyfie an m3u file
-and to proxyfie an Xtream iptv service (client API).
+This is a community-maintained fork of
+[`pierre-emmanuelJ/iptv-proxy`](https://github.com/pierre-emmanuelJ/iptv-proxy),
+which has been dormant since 2023. The fork inherits GPLv3 and
+preserves the original copyright in every source file. Focus is
+stability, current dependencies, and closing recurring failure
+classes that have accumulated in the upstream issue tracker —
+not feature expansion.
 
-### M3U and M3U8
+## Configuration
 
-M3U service convert an iptv m3u file into a web proxy server.
+All configuration is via environment variables. Names follow three
+categorical prefixes that describe which surface the variable
+operates on:
 
-It's transform all the original tracks to an new url pointing on the proxy.
+- **`SOURCE_*`** — what the proxy reads from (M3U URL, Xtream provider
+  credentials and behavior, user-agent sent to the source).
+- **`PROXY_*`** — what the proxy exposes to the player (auth credentials,
+  served M3U filename).
+- **`REWRITE_*`** — what the proxy emits in URLs (hostname, ports, scheme).
 
+Most variables accept the upstream-original name as a deprecated
+alias and log a deprecation warning when used. Two variables have no
+back-compat alias by design and are noted below.
 
-### Xtream code client api
+### `SOURCE_*` — upstream connection
 
-proxy on Xtream code (client API)
+| Var | Deprecated alias | Default | Notes |
+|---|---|---|---|
+| `SOURCE_M3U_URL` | `M3U_URL` | `""` | Remote URL or local file path of the source M3U. Empty disables M3U mode. |
+| `SOURCE_XC_BASE_URL` | `XTREAM_BASE_URL` | `""` | Base URL of the Xtream provider (e.g., `http://provider.tv:1234`). |
+| `SOURCE_XC_USER` | `XTREAM_USER` | `""` | Xtream provider username. |
+| `SOURCE_XC_PASSWORD` | `XTREAM_PASSWORD` | `""` | Xtream provider password. |
+| `SOURCE_XC_CACHED_M3U_TTL` | `M3U_CACHE_EXPIRATION` | `1` | Hours to cache the rebuilt M3U before re-fetching from upstream. |
+| `SOURCE_XC_APIGET_NOBACKCOMPAT` | `XTREAM_API_GET` | `false` | When `true`, `/get.php` builds the M3U from the provider's API endpoints (includes Series and VOD). Default keeps the legacy behavior of forwarding the provider's own `/get.php` response. |
+| `SOURCE_UA_OVERRIDE` | — | `""` (passthrough) | User-agent sent to the upstream. Empty passes the client's UA through unchanged; set when a provider gates on a specific UA. |
 
-support live, vod, series and full epg :rocket:
+### `PROXY_*` — what the proxy presents to the player
 
-### M3u Example
+| Var | Deprecated alias | Default | Notes |
+|---|---|---|---|
+| `PROXY_USER` | `USER` | `usertest` | Username clients use to authenticate to this proxy. **Set this.** |
+| `PROXY_PASSWORD` | `PASSWORD` | `passwordtest` | Password for the same. **Set this.** |
+| `PROXY_M3U` | `M3U_FILE_NAME` | `iptv.m3u` | Filename served as the player-facing M3U. |
 
-Original iptv m3u file
+### `REWRITE_*` — what the proxy emits in URLs
 
-```m3u
-#EXTM3U
-#EXTINF:-1 tvg-ID="examplechanel1.com" tvg-name="chanel1" tvg-logo="http://ch.xyz/logo1.png" group-title="USA HD",CHANEL1-HD
-http://iptvexample.net:1234/12/test/1
-#EXTINF:-1 tvg-ID="examplechanel2.com" tvg-name="chanel2" tvg-logo="http://ch.xyz/logo2.png" group-title="USA HD",CHANEL2-HD
-http://iptvexample.net:1234/13/test/2
-#EXTINF:-1 tvg-ID="examplechanel3.com" tvg-name="chanel3" tvg-logo="http://ch.xyz/logo3.png" group-title="USA HD",CHANEL3-HD
-http://iptvexample.net:1234/14/test/3
-#EXTINF:-1 tvg-ID="examplechanel4.com" tvg-name="chanel4" tvg-logo="http://ch.xyz/logo4.png" group-title="USA HD",CHANEL4-HD
-http://iptvexample.net:1234/15/test/4
-```
+| Var | Deprecated alias | Default | Notes |
+|---|---|---|---|
+| `REWRITE_HOSTNAME` | — (no alias) | `""` | Hostname or IP this proxy advertises in rewritten URLs. **No back-compat for `HOSTNAME`** — Docker auto-sets that variable in containers, and silently consuming it caused operator pain. Set `REWRITE_HOSTNAME` explicitly. |
+| `REWRITE_PORT` | `PORT` | `8080` | TCP port the proxy listens on. |
+| `REWRITE_REVPROXY_PORT` | `ADVERTISED_PORT` | listen port | Port advertised in rewritten URLs. Set when behind a reverse proxy on a different external port. |
+| `REWRITE_HTTPS` | `HTTPS` | `false` | Emit `https://` in rewritten URLs. Use behind a TLS-terminating reverse proxy. |
 
-What M3U proxy IPTV do
- - convert chanels url to new endpoints
- - convert original m3u file with new routes pointing to the proxy
+Bad values for integer / boolean variables fail at startup with a
+clear message rather than silently falling back to a default.
 
-Start proxy server example
+All proxy routes are mounted under `/xcp/` — operators previously
+using `CUSTOM_ENDPOINT` to set a path prefix should handle path
+routing at their reverse proxy now. The `xcp` namespace is part of
+the proxy's identity.
 
-```Bash
-iptv-proxy --m3u-url http://example.com/get.php?username=user&password=pass&type=m3u_plus&output=m3u8 \
-             --port 8080 \
-             --hostname proxyexample.com \
-             --user test \
-             --password passwordtest
-```
+## Quickstart
 
+Minimal `docker-compose.yml` for an Xtream upstream:
 
- That's give you an m3u file on a specific endpoint `iptv.m3u` in our example
- 
- `http://proxyserver.com:8080/iptv.m3u?username=test&password=passwordtest`
-
-All the new routes pointing on your proxy server
-```m3u
-#EXTM3U
-#EXTINF:-1 tvg-ID="examplechanel1.com" tvg-name="chanel1" tvg-logo="http://ch.xyz/logo1.png" group-title="USA HD",CHANEL1-HD
-http://proxyserver.com:8080/12/test/1?username=test&password=passwordtest
-#EXTINF:-1 tvg-ID="examplechanel2.com" tvg-name="chanel2" tvg-logo="http://ch.xyz/logo2.png" group-title="USA HD",CHANEL2-HD
-http://proxyserver.com:8080/13/test/2?username=test&password=passwordtest
-#EXTINF:-1 tvg-ID="examplechanel3.com" tvg-name="chanel3" tvg-logo="http://ch.xyz/logo3.png" group-title="USA HD",CHANEL3-HD
-http://proxyserver.com:8080/14/test/3?username=test&password=passwordtest
-#EXTINF:-1 tvg-ID="examplechanel4.com" tvg-name="chanel4" tvg-logo="http://ch.xyz/logo4.png" group-title="USA HD",CHANEL4-HD
-http://proxyserver.com:8080/15/test/4?username=test&password=passwordtest
-```
-
-### M3u8 Example
-
-The m3u8 feature is like m3u.
-The playlist should be in the m3u format and should contain all m3u8 tracks.
-
-Sample of the original m3u file containing m3u8 track:
-```Shell
-#EXTM3U
-#EXTINF:-1 tvg-ID="examplechanel1.com" tvg-name="chanel1" tvg-logo="http://ch.xyz/logo1.png" group-title="USA HD",CHANEL1-HD
-http://iptvexample.net:1234/12/test/1.m3u8
-#EXTINF:-1 tvg-ID="examplechanel2.com" tvg-name="chanel2" tvg-logo="http://ch.xyz/logo2.png" group-title="USA HD",CHANEL2-HD
-http://iptvexample.net:1234/13/test/2.m3u8
-```
-
-### Xtream code client API example
-
-```Bash
-% iptv-proxy --m3u-url http://example.com:1234/get.php?username=user&password=pass&type=m3u_plus&output=m3u8 \
-             --port 8080 \
-             --hostname proxyexample.com \
-             ## put xtream flags if you want to add xtream proxy
-             --xtream-user xtream_user \
-             --xtream-password xtream_password \
-             --xtream-base-url http://example.com:1234 \
-             --user test \
-             --password passwordtest
-             
-```
-
-What Xtream proxy do
-
- - convert xtream `xtream-user ` and `xtream-password` into new `user` and `password`
- - convert `xtream-base-url` with `hostname` and `port`
- 
-Original xtream credentials
- 
- ```
- user: xtream_user
- password: xtream_password
- base-url: http://example.com:1234
- ```
- 
-New xtream credentials
-
- ```
- user: test
- password: passwordtest
- base-url: http://proxyexample.com:8080
- ```
- 
- All xtream live, streams, vod, series... are proxyfied! 
- 
- 
- You can get the m3u file with the original Xtream api request:
- ```
- http://proxyexample.com:8080/get.php?username=test&password=passwordtest&type=m3u_plus&output=ts
- ```
-
-
-## Installation
-
-Download lasted [release](https://github.com/pierre-emmanuelJ/iptv-proxy/releases)
-
-Or
-
-`% go install` in root repository
-
-## With Docker
-
-### Prerequisite
-
- - Add an m3u URL in `docker-compose.yml` or add local file in `iptv` folder
- - `HOSTNAME` and `PORT` to expose
- - Expose same container port as the `PORT` ENV variable 
-
-```Yaml
- ports:
-       # have to be the same as ENV variable PORT
+```yaml
+version: "3"
+services:
+  iptv-proxy:
+    build: .
+    container_name: iptv-proxy
+    restart: on-failure
+    ports:
       - 8080:8080
- environment:
-      # if you are using m3u remote file
-      # M3U_URL: http://example.com:1234/get.php?username=user&password=pass&type=m3u_plus&output=m3u8
-      M3U_URL: /root/iptv/iptv.m3u
-      # Port to expose the IPTVs endpoints
-      PORT: 8080
-      # Hostname or IP to expose the IPTVs endpoints (for machine not for docker)
-      HOSTNAME: localhost
+    environment:
+      # Upstream Xtream provider
+      SOURCE_XC_BASE_URL: "http://provider.example.tv:8080"
+      SOURCE_XC_USER: your_provider_username
+      SOURCE_XC_PASSWORD: your_provider_password
+
+      # Credentials the player uses to connect to this proxy
+      PROXY_USER: your_proxy_username
+      PROXY_PASSWORD: your_proxy_password
+
+      # How the proxy advertises itself in rewritten URLs
+      REWRITE_HOSTNAME: iptv-proxy.example.lan
+      REWRITE_PORT: 8080
+
       GIN_MODE: release
-      ## Xtream-code proxy configuration
-      ## (put these env variables if you want to add xtream proxy)
-      XTREAM_USER: xtream_user
-      XTREAM_PASSWORD: xtream_password
-      XTREAM_BASE_URL: "http://example.com:1234"
-      USER: test
-      PASSWORD: testpassword
 ```
 
-### Start
+Player then connects using `PROXY_USER` / `PROXY_PASSWORD` against
+`http://iptv-proxy.example.lan:8080/xcp/get.php` (or the
+player's Xtream-Codes setup screen).
 
+## Modes
+
+### M3U passthrough
+
+Operator provides a source M3U via `SOURCE_M3U_URL` (remote URL or
+local file path). The proxy parses the M3U, registers a route per
+track under `/xcp/<PROXY_USER>/<PROXY_PASSWORD>/<index>/<basename>`,
+and serves a rewritten M3U at `/xcp/<PROXY_M3U>` containing those
+proxy-side URLs. Players see a stable proxy endpoint instead of
+the upstream provider's URLs.
+
+### Xtream-Codes proxy
+
+Operator provides upstream Xtream credentials via `SOURCE_XC_*`. The
+proxy presents itself as an Xtream-Codes-compatible API at the
+standard endpoints (`/xcp/player_api.php`, `/xcp/xmltv.php`,
+`/xcp/get.php`, etc.) using `PROXY_USER` / `PROXY_PASSWORD`. Player
+authenticates against the proxy; the proxy translates calls to the
+upstream provider.
+
+Both modes can be configured simultaneously.
+
+## Building from source
+
+```bash
+# Build the binary
+go build -mod=vendor
+
+# Build a multi-arch container image
+docker buildx build --platform linux/amd64,linux/arm64 -t iptv-proxy:local .
 ```
-% docker-compose up -d
-```
 
-## TODO
+## License
 
-there is basic auth just for testing.
-change with a real auth with database and user management
-and auth with token...
-
-**ENJOY!**
+GPLv3, inherited from the original
+[`pierre-emmanuelJ/iptv-proxy`](https://github.com/pierre-emmanuelJ/iptv-proxy).
+Pierre-Emmanuel Jacquier's copyright is preserved in every modified
+source file (GPLv3 §5(a)). Modifications carry an additional
+`Copyright (C) 2026 warrentc3` line above the original.
 
 ## Powered by
 
-- [cobra](https://github.com/spf13/cobra)
-- [go.xtream-codes](https://github.com/warrentc3/go.xtream-codes)
-- [gin](https://github.com/gin-gonic/gin)
-
-Grab me a beer 🍻
-
-[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate?hosted_button_id=WQAAMQWJPKHUN)
-
+- [gin](https://github.com/gin-gonic/gin) — HTTP routing.
+- [gosettings](https://github.com/qdm12/gosettings) by qdm12 — env var
+  reader with deprecation-warning support.
+- [go.xtream-codes](https://github.com/warrentc3/go.xtream-codes) —
+  Xtream-Codes API client (a maintained fork of `tellytv/go.xtream-codes`).
