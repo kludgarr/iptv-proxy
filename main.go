@@ -76,13 +76,13 @@ func buildConfig() (*config.ProxyConfig, error) {
 	})
 
 	m3uURL := r.String("SOURCE_M3U_URL", reader.RetroKeys("M3U_URL"))
-	var remoteURL *url.URL
-	if m3uURL != "" {
-		u, err := url.Parse(m3uURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid SOURCE_M3U_URL: %w", err)
-		}
-		remoteURL = u
+	// url.Parse("") returns a non-nil zero-value *url.URL, NOT an error.
+	// Preserves pierre's pre-modernization invariant that ProxyConfig.RemoteURL
+	// is always non-nil; downstream code in pkg/server checks RemoteURL.String()
+	// for emptiness rather than nil-comparing the pointer.
+	remoteURL, err := url.Parse(m3uURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SOURCE_M3U_URL: %w", err)
 	}
 
 	xtreamUser := r.String("SOURCE_XC_USER", reader.RetroKeys("XTREAM_USER"))

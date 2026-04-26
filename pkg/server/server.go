@@ -62,8 +62,14 @@ type Config struct {
 
 // NewServer initialize a new server configuration
 func NewServer(config *config.ProxyConfig) (*Config, error) {
+	// RemoteURL is always non-nil per main.go's url.Parse contract — empty
+	// SOURCE_M3U_URL produces a zero-value *url.URL whose String() is "".
+	if config.RemoteURL.String() == "" && config.XtreamBaseURL == "" {
+		return nil, fmt.Errorf("at least one of SOURCE_M3U_URL or SOURCE_XC_BASE_URL must be set")
+	}
+
 	var p m3u.Playlist
-	if config.RemoteURL != nil && config.RemoteURL.String() != "" {
+	if config.RemoteURL.String() != "" {
 		var err error
 		p, err = m3u.Parse(config.RemoteURL.String())
 		if err != nil {
