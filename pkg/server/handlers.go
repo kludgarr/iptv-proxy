@@ -35,7 +35,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/warrentc3/iptv-proxy/pkg/httptrace"
+	"github.com/kludgarr/iptv-proxy/pkg/httptrace"
 )
 
 func (c *Config) getM3U(ctx *gin.Context) {

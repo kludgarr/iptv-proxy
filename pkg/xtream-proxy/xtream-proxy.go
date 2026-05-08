@@ -28,9 +28,9 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/warrentc3/iptv-proxy/pkg/config"
-	"github.com/warrentc3/iptv-proxy/pkg/httptrace"
-	xtream "github.com/warrentc3/go.xtream-codes"
+	"github.com/kludgarr/iptv-proxy/pkg/config"
+	"github.com/kludgarr/iptv-proxy/pkg/httptrace"
+	xtream "github.com/kludgarr/go.xtream-codes"
 )
 
 const (
