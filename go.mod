@@ -5,8 +5,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/jamesnetherton/m3u v0.4.0
-	github.com/qdm12/gosettings v0.4.4
 	github.com/kludgarr/go.xtream-codes v0.0.0-20220204001149-59925bc76764
+	github.com/qdm12/gosettings v0.4.4
 )
 
 require (
@@ -29,7 +29,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.1 // indirect
