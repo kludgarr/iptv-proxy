@@ -66,8 +66,12 @@ type XtreamClient struct {
 	streams map[int]Stream
 }
 
-// NewClient returns an initialized XtreamClient with the given values.
-func NewClient(username, password, baseURL string) (*XtreamClient, error) {
+// newClient builds and authenticates an XtreamClient with an explicit context
+// and User-Agent. The UA is set on the struct BEFORE the in-constructor auth
+// request fires, so providers that gate on User-Agent see the supplied value
+// on the authentication call too — not just on subsequent requests. All
+// exported constructors delegate here; this is the single build+auth path.
+func newClient(ctx context.Context, username, password, baseURL, userAgent string) (*XtreamClient, error) {
 
 	_, parseURLErr := url.Parse(baseURL)
 	if parseURLErr != nil {
@@ -78,12 +82,12 @@ func NewClient(username, password, baseURL string) (*XtreamClient, error) {
 		Username:  username,
 		Password:  password,
 		BaseURL:   baseURL,
-		UserAgent: defaultUserAgent,
+		UserAgent: userAgent,
 
 		// 90s accommodates legitimate large responses (XMLTV can exceed a minute)
 		// while still failing visibly on a hung upstream rather than blocking forever.
 		HTTP:    &http.Client{Timeout: 90 * time.Second},
-		Context: context.Background(),
+		Context: ctx,
 
 		streams: make(map[int]Stream),
 	}
@@ -123,27 +127,21 @@ func NewClient(username, password, baseURL string) (*XtreamClient, error) {
 	return client, nil
 }
 
+// NewClient returns an initialized XtreamClient with the given values.
+func NewClient(username, password, baseURL string) (*XtreamClient, error) {
+	return newClient(context.Background(), username, password, baseURL, defaultUserAgent)
+}
+
 // NewClientWithContext returns an initialized XtreamClient with the given values.
 func NewClientWithContext(ctx context.Context, username, password, baseURL string) (*XtreamClient, error) {
-	c, err := NewClient(username, password, baseURL)
-	if err != nil {
-		return nil, err
-	}
-	c.Context = ctx
-
-	return c, nil
+	return newClient(ctx, username, password, baseURL, defaultUserAgent)
 }
 
 // NewClientWithUserAgent returns an initialized XtreamClient with the given values.
+// The User-Agent is applied before the authentication request, so a provider
+// that gates on UA sees the supplied value on every request including auth.
 func NewClientWithUserAgent(ctx context.Context, username, password, baseURL, userAgent string) (*XtreamClient, error) {
-	c, err := NewClient(username, password, baseURL)
-	if err != nil {
-		return nil, err
-	}
-	c.UserAgent = userAgent
-	c.Context = ctx
-
-	return c, nil
+	return newClient(ctx, username, password, baseURL, userAgent)
 }
 
 // GetStreamURL will return a stream URL string for the given streamID and wantedFormat.
