@@ -1,4 +1,4 @@
-module github.com/warrentc3/iptv-proxy
+module github.com/kludgarr/iptv-proxy
 
 require (
 	github.com/gin-contrib/cors v1.7.7
@@ -6,7 +6,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jamesnetherton/m3u v0.4.0
 	github.com/qdm12/gosettings v0.4.4
-	github.com/warrentc3/go.xtream-codes v0.0.0-20220204001149-59925bc76764
+	github.com/kludgarr/go.xtream-codes v0.0.0-20220204001149-59925bc76764
 )
 
 require (
@@ -44,6 +44,6 @@ require (
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.69 // indirect
 )
 
-replace github.com/warrentc3/go.xtream-codes => ../go.xtream-codes
+replace github.com/kludgarr/go.xtream-codes => ../go.xtream-codes
 
 go 1.26

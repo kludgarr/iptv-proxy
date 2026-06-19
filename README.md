@@ -147,5 +147,5 @@ source file (GPLv3 §5(a)). Modifications carry an additional
 - [gin](https://github.com/gin-gonic/gin) — HTTP routing.
 - [gosettings](https://github.com/qdm12/gosettings) by qdm12 — env var
   reader with deprecation-warning support.
-- [go.xtream-codes](https://github.com/warrentc3/go.xtream-codes) —
+- [go.xtream-codes](https://github.com/kludgarr/go.xtream-codes) —
   Xtream-Codes API client (a maintained fork of `tellytv/go.xtream-codes`).
