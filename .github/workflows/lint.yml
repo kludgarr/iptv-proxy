@@ -33,7 +33,7 @@ jobs:
       # block on them. Flip to false once known-noise is suppressed in
       # .golangci.yml or via // nolint directives.
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9.2.1
+        uses: golangci/golangci-lint-action@v9.3.0
         continue-on-error: true
         with:
           version: v2.11.4
