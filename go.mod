@@ -4,7 +4,7 @@ require (
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/jamesnetherton/m3u v0.4.0
+	github.com/jamesnetherton/m3u v0.4.1
 	github.com/kludgarr/go.xtream-codes v0.1.2
 	github.com/qdm12/gosettings v0.4.4
 )

@@ -108,7 +108,7 @@ github.com/goccy/go-yaml/token
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
-# github.com/jamesnetherton/m3u v0.4.0
+# github.com/jamesnetherton/m3u v0.4.1
 ## explicit; go 1.17
 github.com/jamesnetherton/m3u
 # github.com/json-iterator/go v1.1.12
