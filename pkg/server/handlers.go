@@ -23,9 +23,9 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -34,6 +34,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+)
+
+var (
+	errInvalidHLSBaseURL   = errors.New("invalid HLS base URL")
+	errInvalidHLSReference = errors.New("invalid HLS relative reference")
 )
 
 func (c *Config) getM3U(ctx *gin.Context) {
@@ -56,13 +61,63 @@ func (c *Config) reverseProxy(ctx *gin.Context) {
 func (c *Config) m3u8ReverseProxy(ctx *gin.Context) {
 	id := ctx.Param("id")
 
-	rpURL, err := url.Parse(strings.ReplaceAll(c.track.URI, path.Base(c.track.URI), id))
+	rpURL, err := resolveHLSRequestURL(c.track.URI, id, ctx.Request.URL.RawQuery)
 	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
+		status := http.StatusInternalServerError
+		if errors.Is(err, errInvalidHLSReference) {
+			status = http.StatusBadRequest
+		}
+		ctx.AbortWithError(status, err) // nolint: errcheck
 		return
 	}
 
 	c.stream(ctx, rpURL)
+}
+
+// resolveHLSRequestURL reconstructs the upstream request represented by a
+// player request against an m3u8 track route. The playlist request itself uses
+// the configured URI unchanged. Child requests are relative references against
+// that playlist URI, so their path and query come from the player request while
+// scheme, authority, and userinfo remain configuration-controlled.
+func resolveHLSRequestURL(trackURI, segment, rawQuery string) (*url.URL, error) {
+	base, err := url.Parse(trackURI)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidHLSBaseURL, err)
+	}
+	if (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
+		return nil, errInvalidHLSBaseURL
+	}
+
+	if !validHLSPathSegment(segment) {
+		return nil, errInvalidHLSReference
+	}
+
+	// The player-facing track URL names the configured playlist by its
+	// basename. Fetch that URI exactly, including its configured query.
+	if segment == path.Base(base.Path) {
+		resolved := *base
+		return &resolved, nil
+	}
+
+	ref := &url.URL{Path: segment, RawQuery: rawQuery}
+	resolved := base.ResolveReference(ref)
+	if resolved.Scheme != base.Scheme || resolved.Host != base.Host || resolved.User.String() != base.User.String() {
+		return nil, errInvalidHLSReference
+	}
+
+	return resolved, nil
+}
+
+func validHLSPathSegment(segment string) bool {
+	if segment == "" || segment == "." || segment == ".." {
+		return false
+	}
+	for _, r := range segment {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(`/\\?#`, r) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
@@ -90,7 +145,7 @@ func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
 	}
 
 	if shouldRetryWithoutRange(resp) {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		req.Header.Del("Range")
 		resp, err = client.Do(req)
 		if err != nil {
@@ -98,7 +153,7 @@ func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
 			return
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	mergeHttpHeader(ctx.Writer.Header(), resp.Header)
 	ctx.Status(resp.StatusCode)
@@ -175,13 +230,13 @@ func (c *Config) authenticate(ctx *gin.Context) {
 		ctx.AbortWithError(http.StatusBadRequest, err) // nolint: errcheck
 		return
 	}
-	if c.ProxyConfig.User.String() != authReq.Username || c.ProxyConfig.Password.String() != authReq.Password {
+	if c.User.String() != authReq.Username || c.Password.String() != authReq.Password {
 		ctx.AbortWithStatus(http.StatusUnauthorized)
 	}
 }
 
 func (c *Config) appAuthenticate(ctx *gin.Context) {
-	contents, err := ioutil.ReadAll(ctx.Request.Body)
+	contents, err := io.ReadAll(ctx.Request.Body)
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 		return
@@ -197,9 +252,9 @@ func (c *Config) appAuthenticate(ctx *gin.Context) {
 		return
 	}
 	log.Printf("[iptv-proxy] %v | %s |App Auth\n", time.Now().Format("2006/01/02 - 15:04:05"), ctx.ClientIP())
-	if c.ProxyConfig.User.String() != q["username"][0] || c.ProxyConfig.Password.String() != q["password"][0] {
+	if c.User.String() != q["username"][0] || c.Password.String() != q["password"][0] {
 		ctx.AbortWithStatus(http.StatusUnauthorized)
 	}
 
-	ctx.Request.Body = ioutil.NopCloser(bytes.NewReader(contents))
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(contents))
 }

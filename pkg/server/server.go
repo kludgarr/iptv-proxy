@@ -99,7 +99,7 @@ func (c *Config) Serve() error {
 	return router.Run(fmt.Sprintf(":%d", c.HostConfig.Port))
 }
 
-func (c *Config) playlistInitialization() error {
+func (c *Config) playlistInitialization() (err error) {
 	if len(c.playlist.Tracks) == 0 {
 		return nil
 	}
@@ -108,7 +108,11 @@ func (c *Config) playlistInitialization() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 
 	return c.marshallInto(f, false)
 }
@@ -122,14 +126,14 @@ func (c *Config) marshallInto(into *os.File, xtream bool) error {
 	for i, track := range c.playlist.Tracks {
 		var buffer bytes.Buffer
 
-		buffer.WriteString("#EXTINF:")                       // nolint: errcheck
-		buffer.WriteString(fmt.Sprintf("%d ", track.Length)) // nolint: errcheck
+		buffer.WriteString("#EXTINF:")            // nolint: errcheck
+		fmt.Fprintf(&buffer, "%d ", track.Length) // nolint: errcheck
 		for i := range track.Tags {
 			if i == len(track.Tags)-1 {
-				buffer.WriteString(fmt.Sprintf("%s=%q", track.Tags[i].Name, track.Tags[i].Value)) // nolint: errcheck
+				fmt.Fprintf(&buffer, "%s=%q", track.Tags[i].Name, track.Tags[i].Value) // nolint: errcheck
 				continue
 			}
-			buffer.WriteString(fmt.Sprintf("%s=%q ", track.Tags[i].Name, track.Tags[i].Value)) // nolint: errcheck
+			fmt.Fprintf(&buffer, "%s=%q ", track.Tags[i].Name, track.Tags[i].Value) // nolint: errcheck
 		}
 
 		uri, err := c.replaceURL(track.URI, i-ret, xtream)
@@ -139,7 +143,7 @@ func (c *Config) marshallInto(into *os.File, xtream bool) error {
 			continue
 		}
 
-		into.WriteString(fmt.Sprintf("%s, %s\n%s\n", buffer.String(), track.Name, uri)) // nolint: errcheck
+		fmt.Fprintf(into, "%s, %s\n%s\n", buffer.String(), track.Name, uri) // nolint: errcheck
 
 		filteredTrack = append(filteredTrack, track)
 	}

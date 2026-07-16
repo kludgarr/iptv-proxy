@@ -40,7 +40,7 @@ func (c *Config) routes(r *gin.RouterGroup) {
 	// the prefix on track routes).
 
 	//Xtream service endopoints
-	if c.ProxyConfig.XtreamBaseURL != "" {
+	if c.XtreamBaseURL != "" {
 		c.xtreamRoutes(r)
 		if c.RemoteURL != nil &&
 			strings.Contains(c.XtreamBaseURL, c.RemoteURL.Host) &&

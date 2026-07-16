@@ -24,7 +24,7 @@ package server
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -65,9 +65,11 @@ func (c *Config) cacheXtreamM3u(playlist *m3u.Playlist, cacheName string) error 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
 	if err := tmp.marshallInto(f, true); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
 		return err
 	}
 	xtreamM3uCache[cacheName] = cacheMeta{path, time.Now()}
@@ -234,7 +236,7 @@ func (c *Config) xtreamPlayerAPIGET(ctx *gin.Context) {
 }
 
 func (c *Config) xtreamPlayerAPIPOST(ctx *gin.Context) {
-	contents, err := ioutil.ReadAll(ctx.Request.Body)
+	contents, err := io.ReadAll(ctx.Request.Body)
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 		return
@@ -468,7 +470,7 @@ func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusFound {
 		location, err := resp.Location()
@@ -497,9 +499,9 @@ func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 				ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 				return
 			}
-			defer hlsResp.Body.Close()
+			defer func() { _ = hlsResp.Body.Close() }()
 
-			b, err := ioutil.ReadAll(hlsResp.Body)
+			b, err := io.ReadAll(hlsResp.Body)
 			if err != nil {
 				ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 				return
@@ -512,7 +514,7 @@ func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 			ctx.Data(http.StatusOK, hlsResp.Header.Get("Content-Type"), []byte(body))
 			return
 		}
-		ctx.AbortWithError(http.StatusInternalServerError, errors.New("Unable to HLS stream")) // nolint: errcheck
+		ctx.AbortWithError(http.StatusInternalServerError, errors.New("unable to HLS stream")) // nolint: errcheck
 		return
 	}
 
