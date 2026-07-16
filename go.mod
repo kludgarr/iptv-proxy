@@ -5,8 +5,8 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/jamesnetherton/m3u v0.4.0
+	github.com/kludgarr/go.xtream-codes v0.1.2
 	github.com/qdm12/gosettings v0.4.4
-	github.com/kludgarr/go.xtream-codes v0.0.0-20220204001149-59925bc76764
 )
 
 require (
@@ -43,7 +43,5 @@ require (
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.69 // indirect
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.69 // indirect
 )
-
-replace github.com/kludgarr/go.xtream-codes => ../go.xtream-codes
 
 go 1.26

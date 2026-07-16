@@ -15,7 +15,7 @@ type ServerInfo struct {
 	RTMPPort     FlexInt            `json:"rtmp_port"`
 	Protocol     string             `json:"server_protocol"`
 	TimeNow      string             `json:"time_now"`
-	TimestampNow Timestamp          `json:"timestamp_now,string"`
+	TimestampNow Timestamp          `json:"timestamp_now"`
 	Timezone     string             `json:"timezone"`
 	URL          string             `json:"url"`
 	Version      string             `json:"version,omitempty"`
@@ -30,7 +30,7 @@ type UserInfo struct {
 	Auth                 ConvertibleBoolean `json:"auth"`
 	CreatedAt            Timestamp          `json:"created_at"`
 	ExpDate              *Timestamp         `json:"exp_date"`
-	IsTrial              ConvertibleBoolean `json:"is_trial,string"`
+	IsTrial              ConvertibleBoolean `json:"is_trial"`
 	MaxConnections       FlexInt            `json:"max_connections"`
 	Message              string             `json:"message"`
 	Password             string             `json:"password"`

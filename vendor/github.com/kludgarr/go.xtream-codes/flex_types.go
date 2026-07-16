@@ -18,9 +18,9 @@ type Timestamp struct {
 // MarshalJSON returns the Unix timestamp as a string.
 func (t Timestamp) MarshalJSON() ([]byte, error) {
 	if t.quoted {
-		return []byte(`"` + strconv.FormatInt(t.Time.Unix(), 10) + `"`), nil
+		return []byte(`"` + strconv.FormatInt(t.Unix(), 10) + `"`), nil
 	}
-	return []byte(strconv.FormatInt(t.Time.Unix(), 10)), nil
+	return []byte(strconv.FormatInt(t.Unix(), 10)), nil
 }
 
 // UnmarshalJSON converts the int or string to a Unix timestamp.
@@ -87,7 +87,7 @@ func (bit *ConvertibleBoolean) UnmarshalJSON(data []byte) error {
 	case "0", "false":
 		bit.bool = false
 	default:
-		return fmt.Errorf("Boolean unmarshal error: invalid input %s", asString)
+		return fmt.Errorf("boolean unmarshal error: invalid input %s", asString)
 	}
 	return nil
 }

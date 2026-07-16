@@ -271,11 +271,6 @@ func (c *Config) xtreamPlayerAPI(ctx *gin.Context, q url.Values) {
 
 	log.Printf("[iptv-proxy] %v | %s |Action\t%s\n", time.Now().Format("2006/01/02 - 15:04:05"), ctx.ClientIP(), action)
 
-	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-		return
-	}
-
 	ctx.JSON(http.StatusOK, resp)
 }
 
