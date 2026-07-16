@@ -37,7 +37,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jamesnetherton/m3u"
-	"github.com/kludgarr/iptv-proxy/pkg/httptrace"
 	xtreamapi "github.com/kludgarr/iptv-proxy/pkg/xtream-proxy"
 )
 
@@ -448,8 +447,7 @@ func getHlsRedirectURL(channel string) (*url.URL, error) {
 
 func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
 	client := &http.Client{
-		Timeout:   90 * time.Second,
-		Transport: httptrace.WrapTransport(nil),
+		Timeout: 90 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

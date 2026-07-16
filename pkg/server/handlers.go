@@ -34,8 +34,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/kludgarr/iptv-proxy/pkg/httptrace"
 )
 
 func (c *Config) getM3U(ctx *gin.Context) {
@@ -73,7 +71,7 @@ func (c *Config) stream(ctx *gin.Context, oriURL *url.URL) {
 	// at the wall. Lifecycle is bound to the player connection via
 	// NewRequestWithContext(ctx.Request.Context()) — when the player
 	// disconnects, the upstream request cancels too.
-	client := &http.Client{Transport: httptrace.WrapTransport(nil)}
+	client := &http.Client{}
 
 	req, err := http.NewRequestWithContext(ctx.Request.Context(), "GET", oriURL.String(), nil)
 	if err != nil {

@@ -68,6 +68,4 @@ type ProxyConfig struct {
 	AdvertisedPort       int
 	HTTPS                bool
 	User, Password       CredentialString
-	DebugHTTP            bool
-	DebugHTTPFile        string
 }
