@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6.4.0
+        uses: actions/setup-go@v6.5.0
         with:
           go-version-file: go.mod
           cache: false
@@ -33,7 +33,7 @@ jobs:
       # block on them. Flip to false once known-noise is suppressed in
       # .golangci.yml or via // nolint directives.
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9.2.1
+        uses: golangci/golangci-lint-action@v9.3.0
         continue-on-error: true
         with:
-          version: v2.11.4
+          version: latest
