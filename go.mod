@@ -44,4 +44,4 @@ require (
 	kernel.org/pub/linux/libs/security/libcap/psx v1.2.78 // indirect
 )
 
-go 1.26.5
+go 1.26.0
