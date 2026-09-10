@@ -5,7 +5,7 @@ RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=vendor -o /iptv-proxy .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -o /iptv-proxy .
 
 FROM alpine:3.24
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
