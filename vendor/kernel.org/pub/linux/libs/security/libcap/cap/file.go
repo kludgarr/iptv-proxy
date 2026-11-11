@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"syscall"
@@ -24,6 +25,11 @@ const (
 	vfsCapRevision1 = uint32(0x01000000)
 	vfsCapRevision2 = uint32(0x02000000)
 	vfsCapRevision3 = uint32(0x03000000)
+)
+
+// uapi/asm-generic/fcntl.h defined
+const (
+	O_PATH = 0x200000
 )
 
 // Data types stored in little-endian order.
@@ -58,7 +64,9 @@ var ErrBadSize = errors.New("filecap bad size")
 // capability Set values is not supported by this package. This
 // generally implies you are using an exceptionally old
 // "../libcap/cap" package. An upgrade is needed, or failing that see
-// https://sites.google.com/site/fullycapable/ for how to file a bug.
+// [the Fully Capable site] for the way to report or review a bug.
+//
+// [the Fully Capable site]: https://sites.google.com/site/fullycapable/
 var ErrBadMagic = errors.New("unsupported magic")
 
 // ErrBadPath indicates a failed attempt to set a file capability on
@@ -134,7 +142,7 @@ func digestFileCap(d []byte, sz int, err error) (*Set, error) {
 func GetFd(file *os.File) (*Set, error) {
 	var raw3 vfsCaps3
 	d := make([]byte, binary.Size(raw3))
-	sz, _, oErr := multisc.r6(syscall.SYS_FGETXATTR, uintptr(file.Fd()), uintptr(unsafe.Pointer(xattrNameCaps)), uintptr(unsafe.Pointer(&d[0])), uintptr(len(d)), 0, 0)
+	sz, _, oErr := multisc.r6(syscall.SYS_FGETXATTR, fd(file), uintptr(unsafe.Pointer(xattrNameCaps)), uintptr(unsafe.Pointer(&d[0])), uintptr(len(d)), 0, 0)
 	var err error
 	if oErr != 0 {
 		err = oErr
@@ -228,7 +236,40 @@ func (c *Set) packFileCap() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// specialFile confirms that the open file descriptor is not a regular
+// file.
+func specialFile(filed uintptr) bool {
+	var stat syscall.Stat_t
+	if err := syscall.Fstat(int(filed), &stat); err != nil {
+		return false
+	}
+	return (stat.Mode & syscall.S_IFMT) != syscall.S_IFREG
+}
+
 //go:uintptrescapes
+
+// setFiled sets the file capability of an open file descriptor.
+func (c *Set) setFiled(filed uintptr) error {
+	if c == nil {
+		if _, _, err := multisc.r6(syscall.SYS_FREMOVEXATTR, filed, uintptr(unsafe.Pointer(xattrNameCaps)), 0, 0, 0, 0); err != 0 {
+			return err
+		}
+		return nil
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	d, err := c.packFileCap()
+	if err != nil {
+		return err
+	}
+	if specialFile(filed) {
+		return ErrBadPath
+	}
+	if _, _, err := multisc.r6(syscall.SYS_FSETXATTR, filed, uintptr(unsafe.Pointer(xattrNameCaps)), uintptr(unsafe.Pointer(&d[0])), uintptr(len(d)), 0, 0); err != 0 {
+		return err
+	}
+	return nil
+}
 
 // SetFd attempts to set the file capabilities of an open
 // (*os.File).Fd(). This function can also be used to delete a file's
@@ -254,22 +295,7 @@ func (c *Set) packFileCap() ([]byte, error) {
 // this package (or libcap, assisted by libpsx, for threaded C/C++
 // family code).
 func (c *Set) SetFd(file *os.File) error {
-	if c == nil {
-		if _, _, err := multisc.r6(syscall.SYS_FREMOVEXATTR, uintptr(file.Fd()), uintptr(unsafe.Pointer(xattrNameCaps)), 0, 0, 0, 0); err != 0 {
-			return err
-		}
-		return nil
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	d, err := c.packFileCap()
-	if err != nil {
-		return err
-	}
-	if _, _, err := multisc.r6(syscall.SYS_FSETXATTR, uintptr(file.Fd()), uintptr(unsafe.Pointer(xattrNameCaps)), uintptr(unsafe.Pointer(&d[0])), uintptr(len(d)), 0, 0); err != 0 {
-		return err
-	}
-	return nil
+	return c.setFiled(fd(file))
 }
 
 //go:uintptrescapes
@@ -281,18 +307,25 @@ func (c *Set) SetFd(file *os.File) error {
 // Note, see the comment for SetFd() for some non-obvious behavior of
 // Linux for the Effective Flag on the modified file.
 func (c *Set) SetFile(path string) error {
-	fi, err := os.Stat(path)
+	filed, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err == nil {
+		defer syscall.Close(filed)
+		return c.setFiled(uintptr(filed))
+	}
+
+	// Corner case: attempting to set a capability on a file not
+	// readable by the caller.
+
+	filed, err = syscall.Open(path, O_PATH|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return err
 	}
-	mode := fi.Mode()
-	if mode&os.ModeType != 0 {
+	defer syscall.Close(filed)
+	if specialFile(uintptr(filed)) {
 		return ErrBadPath
 	}
-	if mode&os.FileMode(0111) == 0 {
-		return ErrBadPath
-	}
-	p, err := syscall.BytePtrFromString(path)
+	stable := fmt.Sprint(procRoot, "/self/fd/", filed)
+	p, err := syscall.BytePtrFromString(stable)
 	if err != nil {
 		return err
 	}
