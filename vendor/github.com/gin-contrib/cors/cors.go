@@ -3,12 +3,15 @@ package cors
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+const headerOrigin = "Origin"
 
 // Config represents all available options for the middleware.
 type Config struct {
@@ -148,7 +151,12 @@ func (c Config) Validate() error {
 	}
 	for _, origin := range c.AllowOrigins {
 		if !strings.Contains(origin, "*") && !c.validateAllowedSchemas(origin) {
-			return errors.New("bad origin: origins must contain '*' or include " + strings.Join(c.getAllowedSchemas(), ","))
+			return errors.New(
+				"bad origin: origins must contain '*' or include " + strings.Join(
+					c.getAllowedSchemas(),
+					",",
+				),
+			)
 		}
 	}
 	return nil
@@ -162,25 +170,25 @@ func (c Config) parseWildcardRules() [][]string {
 	}
 
 	for _, o := range c.AllowOrigins {
-		if !strings.Contains(o, "*") {
+		prefix, suffix, found := strings.Cut(o, "*")
+		if !found {
 			continue
 		}
 
-		if c := strings.Count(o, "*"); c > 1 {
+		if n := strings.Count(o, "*"); n > 1 {
 			panic(errors.New("only one * is allowed").Error())
 		}
 
-		i := strings.Index(o, "*")
-		if i == 0 {
-			wRules = append(wRules, []string{"*", o[1:]})
+		if prefix == "" {
+			wRules = append(wRules, []string{"*", suffix})
 			continue
 		}
-		if i == (len(o) - 1) {
-			wRules = append(wRules, []string{o[:i], "*"})
+		if suffix == "" {
+			wRules = append(wRules, []string{prefix, "*"})
 			continue
 		}
 
-		wRules = append(wRules, []string{o[:i], o[i+1:]})
+		wRules = append(wRules, []string{prefix, suffix})
 	}
 
 	return wRules
@@ -189,8 +197,16 @@ func (c Config) parseWildcardRules() [][]string {
 // DefaultConfig returns a generic default configuration mapped to localhost.
 func DefaultConfig() Config {
 	return Config{
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type"},
+		AllowMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+			http.MethodHead,
+			http.MethodOptions,
+		},
+		AllowHeaders:     []string{headerOrigin, "Content-Length", "Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}
